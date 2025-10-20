@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ナースメイドにたどり着け！<br>ポトロクリニックであみだくじ♡</title>
+<style>
+  :root{
+    --bg:#fff7fb;
+    --pink:#ff7eb6;
+    --aqua:#79d1e3;
+    --deep:#333;
+    --win:#ff4fb0;
+    --lose:#888;
+  }
+  html,body{height:100%;}
+  body{
+    margin:0; padding:0; background:var(--bg);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color:var(--deep);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .frame{
+    width:min(94vw, 430px);
+    aspect-ratio:9/16;
+    background:linear-gradient(180deg, #fff 0%, #fff0fa 100%);
+    border:4px solid #ffd2ea; border-radius:20px; box-shadow:0 10px 30px rgba(0,0,0,.08);
+    position:relative; overflow:hidden;
+  }
+  header{
+    text-align:center; padding:10px 8px 6px;
+  }
+  .tag{
+    display:inline-block; padding:4px 10px; font-size:12px; border-radius:999px; background:#ffe6f3; color:#cc3b88; border:1px solid #ffb7db;
+  }
+  h1{
+    margin:6px 10px 0; font-size: clamp(16px, 4.5vw, 20px); line-height:1.3; font-weight:800;
+    letter-spacing:.02em;
+  }
+  .sub{font-size:12px; color:#666;}
+
+  .canvasWrap{ position:absolute; inset:120px 10px 90px; border-radius:16px; background:#fff; border:2px dashed #ffd2ea; overflow:hidden;}
+  canvas{ display:block; width:100%; height:100%;}
+
+  .topChoices{ position:absolute; left:0; right:0; top:88px; display:flex; justify-content:center; gap:8px;}
+  .choiceBtn{
+    min-width:44px; padding:6px 10px; font-weight:700; font-size:14px; border-radius:999px;
+    background:linear-gradient(180deg, #ffb9db, #ff89c3); color:#fff; border:none; box-shadow:0 3px 0 #d45095;
+  }
+  .choiceBtn[disabled]{ opacity:.6; filter:grayscale(.2);}
+
+  footer.controls{
+    position:absolute; left:0; right:0; bottom:6px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; padding:6px 10px;
+  }
+  .btn{
+    padding:10px 14px; border-radius:12px; border:none; font-weight:800; font-size:14px;
+    box-shadow:0 4px 0 rgba(0,0,0,.08);
+  }
+  .primary{ background:linear-gradient(180deg, #a1e7f3, #6ad0e7); color:#0b4c5a; box-shadow:0 4px 0 #3a9fb1; }
+  .secondary{ background:#ffe6f3; color:#b02a7b; border:1px solid #ffc3e2; }
+  .ghost{ background:#fff; color:#555; border:1px solid #ddd; }
+
+  .overlay{
+    position:absolute; inset:120px 10px 90px; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; opacity:0; transition:opacity .35s ease;
+  }
+  .overlay.show{ opacity:1; }
+  .resultCard{
+    background:#fff; border:3px solid #ffd2ea; border-radius:18px; padding:18px 16px; text-align:center; width:min(88%, 340px);
+    box-shadow:0 20px 40px rgba(255, 71, 165, .18);
+  }
+  .resultCard h2{ margin:0 0 8px; font-size:22px; }
+  .resultCard p{ margin:0; font-size:14px; color:#555; }
+  .badge{ display:inline-block; padding:4px 10px; border-radius:999px; font-weight:800; margin-bottom:8px; }
+  .badge.win{ background:#ffe3f3; color:#c1006c; border:1px solid #ffb6de; }
+  .badge.lose{ background:#eef6ff; color:#1b4aa0; border:1px solid #c6e0ff; }
+
+  .brand{
+    position:absolute; right:10px; top:10px; font-size:12px; color:#777;
+  }
+  .brand b{color:#c1006c}
+
+  .muteLamp{ position:absolute; left:10px; top:10px; font-size:12px; color:#777;}
+
+  /* small phones safety */
+  @media (max-height: 640px){
+    .canvasWrap{ inset:110px 8px 86px; }
+    .topChoices{ top:84px; }
+  }
+</style>
+</head>
+<body>
+  <div class="frame" role="application" aria-label="ナースにたどり着け！あみだくじゲーム">
+    <div class="brand">concept cafe <b>PO・TORO</b></div>
+    <div class="muteLamp" id="muteLamp">🔊 サウンドON</div>
+    <header>
+      <span class="tag">🩺 ポ・トロクリニック</span>
+      <h1>ナースメイドにたどり着け！<br>ポトロクリニックであみだくじ♡</h1>
+      <div class="sub">患者ご主人様は、運命のナースさんに出会えるか…？</div>
+    </header>
+
+    <div class="topChoices" id="choiceRow"></div>
+
+    <div class="canvasWrap"><canvas id="amida"></canvas></div>
+
+    <div class="overlay" id="resultOverlay" aria-live="polite"></div>
+
+    <footer class="controls">
+      <button class="btn primary" id="startBtn">診察開始♡</button>
+      <button class="btn secondary" id="retryBtn" disabled>もう一回</button>
+      <button class="btn ghost" id="muteBtn" aria-pressed="false">🔊 サウンド</button>
+    </footer>
+  </div>
+
+<script>
+(() => {
+  // ====== CONFIG ======
+  const COLS = 4;              // 本数（3〜5推奨）
+  const BAR_COUNT = 18;        // 横線の候補数（自動で重なり回避）
+  const SPEED_Y = 2.2;         // 縦の移動速度(px/frame)
+  const SPEED_X = 3.0;         // 横移動速度
+  const REVEAL_BUFFER = 28;    // 見えていく余白
+
+  // ====== STATE ======
+  const canvas = document.getElementById('amida');
+  const ctx = canvas.getContext('2d');
+  let W = 360, H = 560;
+  let topMargin = 24, bottomMargin = 36, leftMargin = 28, rightMargin = 28;
+  let colX = []; // 各縦線のx座標
+  let bars = []; // {y, from}  from=左の列index (0..COLS-2)
+  let chosenIndex = null; // ユーザが選んだ列
+  let running = false;
+  let revealY = 0; // ここまで下が見える
+  let player = null; // {x,y,col,phase}
+  let goals = []; // 長さCOLS, 値: 'win' or 'lose'
+  let animId = null;
+
+  // ====== AUDIO (WebAudioでBGM/SE生成) ======
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audio = { ctx:null, master:null, muted:false, bgm:null, bgmGain:null };
+  function setupAudio(){
+    if(audio.ctx) return;
+    audio.ctx = new AudioCtx();
+    audio.master = audio.ctx.createGain();
+    audio.master.gain.value = 0.8;
+    audio.master.connect(audio.ctx.destination);
+  }
+  function playBGM(){
+    if(audio.muted) return;
+    setupAudio();
+    stopBGM();
+    // シンプルな待合室ループ（和音アルペジオ）
+    const ctx = audio.ctx;
+    const tempo = 108; // bpm
+    const beat = 60/tempo;
+    audio.bgmGain = ctx.createGain();
+    audio.bgmGain.gain.value = 0.06; // 小さめ
+    audio.bgmGain.connect(audio.master);
+
+    const notes = [262, 330, 392, 523]; // C E G C
+    const start = ctx.currentTime + 0.05;
+    const length = 8; // 小節長(秒)目安
+
+    audio.bgm = { timers:[] };
+    function scheduleLoop(){
+      let t = ctx.currentTime;
+      for(let i=0;i<64;i++){
+        const n = notes[i % notes.length];
+        const when = start + i*beat*0.5;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.value = n;
+        g.gain.setValueAtTime(0, when);
+        g.gain.linearRampToValueAtTime(0.15, when+0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, when+beat*0.45);
+        o.connect(g).connect(audio.bgmGain);
+        o.start(when);
+        o.stop(when+beat*0.5);
+        audio.bgm.timers.push(o);
+      }
+      // ループ
+      audio.bgm.loopTimer = setTimeout(scheduleLoop, length*1000);
+    }
+    scheduleLoop();
+  }
+  function stopBGM(){
+    if(audio.bgm){
+      if(audio.bgm.loopTimer) clearTimeout(audio.bgm.loopTimer);
+      if(audio.bgm.timers){ audio.bgm.timers.forEach(o=>{ try{o.stop();}catch(e){} }); }
+    }
+    if(audio.bgmGain){ audio.bgmGain.disconnect(); audio.bgmGain=null; }
+    audio.bgm=null;
+  }
+  function seChime(win=true){ if(audio.muted) return; setupAudio(); const ctx=audio.ctx;
+    const base = win? 880: 220; // win高め、lose低め
+    const now = ctx.currentTime + 0.02;
+    for(let i=0;i<3;i++){
+      const o = ctx.createOscillator(); const g=ctx.createGain();
+      o.type = win? 'sine':'square';
+      o.frequency.setValueAtTime(base*(i+1), now+i*0.09);
+      g.gain.setValueAtTime(0, now+i*0.09);
+      g.gain.linearRampToValueAtTime(0.25, now+i*0.09+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+i*0.09+0.25);
+      o.connect(g).connect(audio.master); o.start(now); o.stop(now+0.5);
+    }
+  }
+  function seStep(){ if(audio.muted) return; setupAudio(); const ctx=audio.ctx;
+    const o = ctx.createOscillator(); const g=ctx.createGain();
+    o.type='square'; o.frequency.value=600;
+    g.gain.value=0.0001; g.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.12);
+    o.connect(g).connect(audio.master); o.start(); o.stop(ctx.currentTime+0.13);
+  }
+
+  // ====== LAYOUT ======
+  function resize(){
+    const wrap = document.querySelector('.canvasWrap');
+    const rect = wrap.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+    W = Math.floor(rect.width * ratio);
+    H = Math.floor(rect.height * ratio);
+    canvas.width = W; canvas.height = H; canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px';
+
+    topMargin = Math.round(24*ratio);
+    bottomMargin = Math.round(36*ratio);
+    leftMargin = Math.round(28*ratio);
+    rightMargin = Math.round(28*ratio);
+
+    computeCols();
+    draw();
+  }
+  window.addEventListener('resize', () => { resize(); });
+
+  function computeCols(){
+    colX = [];
+    const innerW = W - leftMargin - rightMargin;
+    for(let i=0;i<COLS;i++){
+      const x = leftMargin + (innerW) * (i/(COLS-1));
+      colX.push(x);
+    }
+  }
+
+  // ====== GAME GEN ======
+  function genBars(){
+    const minGap = 18 * (window.devicePixelRatio||1);
+    const ys = [];
+    const usableTop = topMargin + 12;
+    const usableBottom = H - bottomMargin - 12;
+    while(ys.length < BAR_COUNT){
+      const y = Math.round( usableTop + Math.random()*(usableBottom-usableTop) );
+      if(ys.every(v => Math.abs(v - y) > minGap)) ys.push(y);
+    }
+    ys.sort((a,b)=>a-b);
+
+    bars = [];
+    for(const y of ys){
+      // どこに横線を置くか（左端〜右端-1のいずれか）
+      const from = Math.floor(Math.random()*(COLS-1));
+      // 直前の同じ高さ近辺＆同じ列を避ける
+      const tooClose = bars.some(b => Math.abs(b.y - y) < minGap && Math.abs(b.from - from) < 1);
+      if(!tooClose){ bars.push({y, from}); }
+    }
+  }
+
+  function genGoals(){
+    goals = new Array(COLS).fill('lose');
+    const winIndex = Math.floor(Math.random()*COLS);
+    goals[winIndex] = 'win';
+  }
+
+  function resetGame(){
+    chosenIndex = null; running=false; revealY = topMargin;
+    genBars(); genGoals();
+    buildChoiceButtons();
+    stopAnim();
+    player = null;
+    document.getElementById('retryBtn').disabled = true;
+    document.getElementById('resultOverlay').innerHTML = '';
+    document.getElementById('resultOverlay').classList.remove('show');
+    draw();
+  }
+
+  // ====== CHOICES ======
+  function buildChoiceButtons(){
+    const row = document.getElementById('choiceRow');
+    row.innerHTML = '';
+    for(let i=0;i<COLS;i++){
+      const b = document.createElement('button');
+      b.className = 'choiceBtn';
+      b.textContent = `入口${i+1}`;
+      b.onclick = () => choose(i);
+      if(running) b.disabled = true;
+      row.appendChild(b);
+    }
+  }
+
+  function choose(idx){
+    if(running) return;
+    chosenIndex = idx;
+    player = { x: colX[idx], y: topMargin, col: idx, phase: 'down', targetX: colX[idx] };
+    revealY = topMargin + REVEAL_BUFFER;
+    running = true; animate();
+    // ボタンロック
+    [...document.querySelectorAll('.choiceBtn')].forEach(b=> b.disabled = true);
+    seStep(); // 開始SE
+  }
+
+  // ====== DRAW ======
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // 背景格子
+    drawBackdrop();
+    // 縦線
+    ctx.lineWidth = 3 * (window.devicePixelRatio||1);
+    ctx.strokeStyle = '#ffb6de';
+    for(let i=0;i<COLS;i++){
+      line(colX[i], topMargin, colX[i], H-bottomMargin);
+    }
+    // 横線（revealまで）
+    ctx.strokeStyle = '#79d1e3';
+    for(const b of bars){
+      if(b.y <= revealY){
+        line(colX[b.from], b.y, colX[b.from+1], b.y);
+      }
+    }
+    // プレイヤー
+    if(player){ drawPatient(player.x, player.y); }
+
+    // 目隠し（下側を白で覆う）
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 1.0;
+    ctx.fillRect(0, revealY, W, H - revealY);
+
+    // 目隠しの境界に淡いグラデ
+    const g = ctx.createLinearGradient(0, revealY-14, 0, revealY+2);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(1, 'rgba(255,255,255,1)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, revealY-14, W, 16);
+
+    // ゴール（到達直前まで非表示、reveal次第で少しずつ見える）
+    if(revealY > H - bottomMargin - 26){
+      for(let i=0;i<COLS;i++){
+        const cx = colX[i];
+        const ty = H - bottomMargin + 8;
+        if(goals[i]==='win') drawNurse(cx, ty, 0.85);
+        else drawSyringe(cx, ty, 0.85);
+      }
+    }
+  }
+
+  function line(x1,y1,x2,y2){ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+
+  function drawBackdrop(){
+    // 柔らかいハート/十字背景
+    ctx.save();
+    const r = (window.devicePixelRatio||1);
+    for(let y=topMargin; y<H-bottomMargin; y+=40*r){
+      for(let x=leftMargin; x<W-rightMargin; x+=40*r){
+        ctx.globalAlpha = 0.05;
+        ctx.fillStyle = '#ff7eb6';
+        drawHeart(x, y, 6*r);
+        ctx.fillStyle = '#79d1e3';
+        drawPlus(x+14*r, y+12*r, 6*r);
+      }
+    }
+    ctx.restore();
+  }
+  function drawHeart(cx, cy, s){
+    ctx.beginPath();
+    for(let a=0;a<=Math.PI*2;a+=0.1){
+      const x = s*16*Math.pow(Math.sin(a),3)/16;
+      const y = -s*(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))/16;
+      if(a===0) ctx.moveTo(cx+x, cy+y); else ctx.lineTo(cx+x, cy+y);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  function drawPlus(cx, cy, s){
+    ctx.save(); ctx.translate(cx,cy);
+    ctx.beginPath();
+    ctx.rect(-s/2, -s*1.6, s, s*3.2);
+    ctx.rect(-s*1.6, -s/2, s*3.2, s);
+    ctx.fill(); ctx.restore();
+  }
+
+  function drawPatient(x, y){
+    // 患者アイコン：包帯＋顔
+    ctx.save();
+    ctx.translate(x,y);
+    const r = 10*(window.devicePixelRatio||1);
+    // 顔
+    ctx.fillStyle = '#ffe9c9'; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    // 包帯
+    ctx.fillStyle = '#f0f0f0'; ctx.strokeStyle = '#cfcfcf'; ctx.lineWidth = 1*(window.devicePixelRatio||1);
+    ctx.beginPath(); ctx.moveTo(-r, -4); ctx.lineTo(r, -1); ctx.lineTo(r, 3); ctx.lineTo(-r, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // 目
+    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-4,0,1.2*(window.devicePixelRatio||1),0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(4,0,1.2*(window.devicePixelRatio||1),0,Math.PI*2); ctx.fill();
+    // 体
+    ctx.fillStyle = '#c0e9f5'; ctx.beginPath(); ctx.moveTo(-6, r); ctx.lineTo(6, r); ctx.lineTo(0, r+10); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function drawNurse(x, y, scale=1){
+    const r = 9*(window.devicePixelRatio||1)*scale;
+    ctx.save(); ctx.translate(x,y);
+    // 顔
+    ctx.fillStyle = '#ffe9f1'; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    // ナース帽
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, -r*0.9, r*0.9, r*0.55, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ff78b4'; drawPlus(0, -r*0.9, 6*(window.devicePixelRatio||1)*scale);
+    // 目＆口
+    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-3, -1, 1.1*(window.devicePixelRatio||1)*scale, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -1, 1.1*(window.devicePixelRatio||1)*scale, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#ff4fae'; ctx.lineWidth = 1.3*(window.devicePixelRatio||1)*scale; ctx.beginPath(); ctx.arc(0,3,3*scale, 0, Math.PI); ctx.stroke();
+    ctx.restore();
+  }
+  function drawSyringe(x, y, scale=1){
+    const s = 1*(window.devicePixelRatio||1)*scale;
+    ctx.save(); ctx.translate(x,y);
+    // 簡易注射器
+    ctx.fillStyle = '#dff6ff'; ctx.strokeStyle = '#79d1e3'; ctx.lineWidth = 1*s;
+    ctx.beginPath(); ctx.rect(-10*s,-4*s, 20*s, 8*s); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(10*s,0); ctx.lineTo(16*s,0); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ====== ANIMATION / TRAVERSE ======
+  function stopAnim(){ if(animId) cancelAnimationFrame(animId); animId=null; }
+  function animate(){
+    stopAnim();
+    const step = () => {
+      if(!running){ draw(); return; }
+      advancePlayer();
+      draw();
+      animId = requestAnimationFrame(step);
+    };
+    animId = requestAnimationFrame(step);
+  }
+
+  function advancePlayer(){
+    if(!player) return;
+
+    if(player.phase === 'down'){
+      // 次の横棒があるかチェック
+      const nextBar = bars
+        .filter(b => b.y > player.y-1 && Math.abs(b.y - player.y) < 9999)
+        .sort((a,b)=>a.y-b.y)
+        .find(b => b.y >= player.y && (b.from === player.col-1 || b.from === player.col));
+
+      const nextY = nextBar ? nextBar.y : (H - bottomMargin);
+      const dy = Math.min(SPEED_Y, nextY - player.y);
+      player.y += dy;
+      revealY = Math.min(player.y + REVEAL_BUFFER, H - bottomMargin + 12);
+
+      if(Math.abs(player.y - nextY) < 0.5 && nextBar){
+        // 横移動に切替
+        if(nextBar.from === player.col){ // 右へ
+          player.phase = 'right';
+          player.targetX = colX[player.col+1];
+        }else{ // 左へ
+          player.phase = 'left';
+          player.targetX = colX[player.col-1];
+        }
+        seStep();
+      }
+
+      // ゴール判定
+      if(player.y >= H - bottomMargin){
+        running=false;
+        endResult(goals[player.col] === 'win');
+      }
+    } else if(player.phase === 'right' || player.phase === 'left'){
+      const dir = (player.phase === 'right') ? 1 : -1;
+      const vx = dir * SPEED_X;
+      const nx = player.x + vx;
+      if( (dir>0 && nx >= player.targetX) || (dir<0 && nx <= player.targetX) ){
+        player.x = player.targetX;
+        player.col += dir;
+        player.phase = 'down';
+      } else {
+        player.x = nx;
+      }
+    }
+  }
+
+  function endResult(isWin){
+    stopBGM();
+    seChime(isWin);
+
+    const overlay = document.getElementById('resultOverlay');
+    const badge = isWin ? '<span class="badge win">大当たり💖</span>' : '<span class="badge lose">診察中…💊</span>';
+    const title = isWin ? 'ナースさんに診てもらえた♡' : '残念…また診察に来てね';
+    const note = isWin ? '本日のご主人様は超ラッキー！受付で画面を見せてね♪' : '入り口を変えると運命が変わるかも？';
+    overlay.innerHTML = `<div class="resultCard">${badge}<h2>${title}</h2><p>${note}</p></div>`;
+    overlay.classList.add('show');
+
+    document.getElementById('retryBtn').disabled = false;
+  }
+
+  // ====== UI BUTTONS ======
+  document.getElementById('startBtn').addEventListener('click', () => {
+    resetGame();
+    if(!audio.muted){ playBGM(); }
+  });
+  document.getElementById('retryBtn').addEventListener('click', () => {
+    resetGame(); if(!audio.muted){ playBGM(); }
+  });
+  document.getElementById('muteBtn').addEventListener('click', (e) => {
+    audio.muted = !audio.muted;
+    e.currentTarget.setAttribute('aria-pressed', audio.muted? 'true':'false');
+    document.getElementById('muteLamp').textContent = audio.muted? '🔇 サウンドOFF' : '🔊 サウンドON';
+    if(audio.muted){ stopBGM(); } else { if(running || chosenIndex===null){ playBGM(); } }
+  });
+
+  // 初期化
+  resize();
+  computeCols();
+  genBars(); genGoals();
+  buildChoiceButtons();
+  draw();
+})();
+</script>
+</body>
+</html>
