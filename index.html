@@ -393,7 +393,7 @@
     buildAmida();
     animateWalker(selected, 1200, () => {
       if(selected === apparent){
-        const win = Math.random() < (1/2.5);
+        const win = Math.random() < (1/1000);
         if(win){ showWin(); } else { showFake(); }
       }else{ showLose(); }
     });
